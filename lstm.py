@@ -61,8 +61,9 @@ if __name__ == '__main__':
     df = get_df('nano_btc.csv',2)
     # df = df.loc[df['result'].isin([-1, 1])]
     # df = df.sample(1500)
-    df['openopen'] = df['openopen'].apply(lambda x: (1-x)**3)
-    df['volumevolume'] = df['volumevolume'].apply(lambda x: math.tanh(x)**2.2)
-    sns.scatterplot(df, x='openopen', y='volumevolume', hue='result')
+    df = df[['openopen', 'volumevolume', 'result']]
+    df['openopen'] = df['openopen'].apply(lambda x: math.lgamma(x))
+    df['volumevolume'] = df['volumevolume'].apply(lambda x: math.lgamma(math.sqrt(x)))
+    sns.scatterplot(df, x='volumevolume', y='openopen', hue='result')
     plt.show()
     # model = Lstm()
