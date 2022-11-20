@@ -50,15 +50,26 @@ def get_windows(df:pd.DataFrame, window_size:int):
     classes = df['result'].value_counts().reset_index()
     classes = {class_value:nof_samples for (class_value,nof_samples) in  classes.values}
     nof_features = len(df.columns)
-    windows = sliding_window_view(df.values, (window_size, nof_features))
-    windows = windows.reshape(len(windows), window_size, nof_features)
+    sliding_windows = sliding_window_view(df.values, (window_size, nof_features))
+    sliding_windows = sliding_windows.reshape(len(sliding_windows), window_size, nof_features)
     result = list()
     for (class_value, nof_samples) in classes.items():
-        samples = np.array([w for w in windows if w[-1,-1] == class_value])
+        samples = np.array([w for w in sliding_windows if w[-1,-1] == class_value])
         idx = np.random.randint(len(samples), size=min_class)
         samples = samples[idx,:]
         result.append(samples)
-    return np.vstack(result)
+    result = np.vstack(result)
+    result = [_format_window(w) for w in result]
+    return result
+
+def _format_window(window:np.array) -> np.array:
+    (_, nof_columns) = window.shape
+    nof_features = nof_columns-1
+    target = window[-1,-1]
+    win = list(window[:,0:nof_features].T)
+    win.append(np.array(target))
+    return win
+
 
 if __name__ == '__main__':
     ltc = pd.read_parquet('ltc.parquet')
@@ -71,5 +82,6 @@ if __name__ == '__main__':
 
     ltc = ltc[['open_time', 'open', 'volume', 'volumevolume', 'previous_gain', 'previous_btc_gain', 'result']]
     ltc = ltc[['volumevolume', 'previous_gain', 'previous_btc_gain', 'result']]
+    ltc = ltc[['previous_gain', 'result']]
     ltc = ltc.dropna()
     windows = get_windows(ltc, 24)
