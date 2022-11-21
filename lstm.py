@@ -6,6 +6,8 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from numpy.lib.stride_tricks import sliding_window_view
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+
 
 
 def sigmoid(x):
@@ -15,6 +17,10 @@ def sigmoid(x):
 def performance(gain:float) -> float:
     MIN_GAIN = 1.0125
     (LOSS, LATERAL, GAIN) = (-1, 0, 1)
+    # if gain > MIN_GAIN:
+    #     return GAIN
+    # else:
+    #     return LOSS
     if gain >= MIN_GAIN:
         return GAIN
     elif gain <= 1.0:
@@ -25,6 +31,7 @@ def performance(gain:float) -> float:
 def calc_metrics(df:pd.DataFrame) -> pd.DataFrame:
     df = df[['open_time', 'open', 'close', 'volume']]
     df['volumevolume'] = df['volume'].shift(1)/df['volume'].shift(2)
+    df['gain'] = df['close']/df['open']
     df['previous_gain'] = df['close']/df['open']
     df['previous_gain'] = df['previous_gain'].shift(1)
     df['result'] = df['previous_gain'].apply(performance)
@@ -50,28 +57,37 @@ def get_windows(df:pd.DataFrame, window_size:int):
     classes = df['result'].value_counts().reset_index()
     classes = {class_value:nof_samples for (class_value,nof_samples) in  classes.values}
     nof_features = len(df.columns)
+    scaler = MinMaxScaler()
+    numeric = list(set(df.columns.values) - set(['result']))
+    df[numeric] = scaler.fit_transform(df[numeric].values)
     sliding_windows = sliding_window_view(df.values, (window_size, nof_features))
     sliding_windows = sliding_windows.reshape(len(sliding_windows), window_size, nof_features)
-    result = list()
+    windows = list()
     for (class_value, nof_samples) in classes.items():
-        samples = np.array([w for w in sliding_windows if w[-1,-1] == class_value])
+        samples = np.array([w for w in sliding_windows if int(w[-1,-1]) == int(class_value)])
+        samples2 = [w for w in sliding_windows if int(w[-1,-1]) == int(class_value)]
         idx = np.random.randint(len(samples), size=min_class)
         samples = samples[idx,:]
-        result.append(samples)
-    result = np.vstack(result)
-    result = [_format_window(w) for w in result]
-    return result
+        windows.append(samples)
+    windows = np.vstack(windows)
+    # windows = (_format_window(w) for w in windows)
+    features = list()
+    targets = list()
+    for window in windows:
+        feature, target = _format_window(window)
+        features.append(feature)
+        targets.append(target)
+    return (features, targets)
 
 def _format_window(window:np.array) -> np.array:
-    (_, nof_columns) = window.shape
-    nof_features = nof_columns-1
-    target = window[-1,-1]
-    win = list(window[:,0:nof_features].T)
-    win.append(np.array(target))
-    return win
+    nof_columns = len(window[0])
+    nof_features = nof_columns-2
+    target = window[-1,-2]
+    win = window[:,0:nof_features].T
+    # win.append(np.array(target))
+    return (win, target)
 
-
-if __name__ == '__main__':
+def export_window(window_size = 24):
     ltc = pd.read_parquet('ltc.parquet')
     ltc = calc_metrics(ltc)
 
@@ -80,8 +96,12 @@ if __name__ == '__main__':
 
     ltc = add_btc_gain(ltc, btc)
 
-    ltc = ltc[['open_time', 'open', 'volume', 'volumevolume', 'previous_gain', 'previous_btc_gain', 'result']]
-    ltc = ltc[['volumevolume', 'previous_gain', 'previous_btc_gain', 'result']]
-    ltc = ltc[['previous_gain', 'result']]
+    # ltc = ltc[['open_time', 'open', 'volume', 'volumevolume', 'previous_gain', 'previous_btc_gain', 'result']]
+    # ltc = ltc[['volumevolume', 'previous_gain', 'previous_btc_gain', 'gain', 'result']]
+    ltc = ltc[['previous_gain', 'gain', 'result']]
     ltc = ltc.dropna()
-    windows = get_windows(ltc, 24)
+    x, y = get_windows(ltc, window_size)
+    return np.array(x), np.array(y)
+
+if __name__ == '__main__':
+    x, y = export_window()
